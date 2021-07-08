@@ -3,6 +3,8 @@
 namespace Library\Helper;
 
 use Library\Config;
+use Library\Entity\Swoole\EntitySwooleServer;
+use Library\Request;
 use Library\Router;
 use Monolog\Logger;
 use Monolog\Formatter\LineFormatter;
@@ -15,6 +17,7 @@ use Monolog\Handler\RotatingFileHandler;
  *
  * @method static bool info(string $message = '', array $context = [], string $levelName = '', string $channel = '')
  * @method static bool warning(string $message = '', array $context = [], string $levelName = '', string $channel = '')
+ * @method static bool task(string $message = '', array $context = [], string $levelName = '', string $channel = '')
  * @method static bool error(string $message = '', array $context = [], string $levelName = '', string $channel = '')
  * @method static bool success(string $message = '', array $context = [], string $levelName = '', string $channel = '')
  */
@@ -50,14 +53,14 @@ class LogHelper
     public static function __callStatic($name, $arguments)
     {
         $logObject = ((Router::getRouteInstance())->getProject());
-        if (!$logObject) {
-            if (isset($arguments[3]) && $arguments[3] != '') {
-                $fileName = dirname(__FILE__) . "/../../app/{$arguments[3]}/Runtime/logs/" . date('Ymd') . '/';
+        if (!isset($arguments[3]) || $arguments[3] != '') {
+            if ($logObject) {
+                $fileName = dirname(__FILE__) . '/../../app/' . $logObject . '/Runtime/logs/' . date('Ymd') . '/';
             } else {
                 $fileName = dirname(__FILE__) . '/../../runtime/Runtime/logs/' . date('Ymd') . '/';
             }
         } else {
-            $fileName = dirname(__FILE__) . '/../../app/' . $logObject . '/Runtime/logs/' . date('Ymd') . '/';
+            $fileName = dirname(__FILE__) . "/../../app/{$arguments[3]}/Runtime/logs/" . date('Ymd') . '/';
         }
 
         $logger = self::createLogger($name, $fileName);
@@ -83,7 +86,7 @@ class LogHelper
         if (empty(self::$loggers[$name])) {
 
             // 根据业务域名与方法名进行日志名称的确定
-            $category = RequestHelper::server('server_name') ?: Config::get('app.server_name');
+            $category = Request::server('server_name') ?: Config::get('app.server_name');
             // 日志保存时间
             $maxFiles = self::$maxFiles;
             // 日志等级
@@ -96,14 +99,23 @@ class LogHelper
             $handler = new RotatingFileHandler("{$fileName}{$name}.log", $maxFiles, $level, true, $filePermission);
 
             // 组装请求信息
-            $requestInfo = [
-                'ip' => RequestHelper::server('remote_addr') ?: '',
-                'method' => RequestHelper::server('request_method') ?: '',
-                'host' => RequestHelper::server('http_host') ?: '',
-                'uri' => RequestHelper::server('request_uri') ?: ''
-            ];
+            if (EntitySwooleServer::getInstance()) {
+                $requestInfo = [
+                    'ip' => Request::server('remote_addr') ?: '',
+                    'method' => Request::server('request_method') ?: '',
+                    'host' => Request::server('http_host') ?: '',
+                    'uri' => Request::server('request_uri') ?: ''
+                ];
+            } else {
+                $requestInfo = [
+                    'ip' => $_SERVER['REMOTE_ADDR'] ?: '',
+                    'method' => ((Router::getRouteInstance())->getMethod()),
+                    'host' => $_SERVER["SERVER_NAME"] ?: '',
+                    'uri' => $_SERVER["REQUEST_URI"] ?: ''
+                ];
+            }
             $template = "---------------------------------------------------------------";
-            $template .= "\r\n[%datetime%] {$requestInfo['ip']} {$requestInfo['method']} {$requestInfo['host']}{$requestInfo['uri']}";
+            $template .= "\r\n[%datetime%] {$requestInfo['ip']}   {$requestInfo['method']}   {$requestInfo['host']}{$requestInfo['uri']}";
             $template .= "\r\n[%channel%][%level_name%][MESSAGE]: %message%";
             $template .= "\r\n[%channel%][%level_name%][CONTEXT]: %context%";
 

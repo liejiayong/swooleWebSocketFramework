@@ -9,7 +9,9 @@
 namespace Library\Pool;
 
 use Library\Config;
+use Library\Entity\Model\Database\EntityMysql;
 use Swoole\Coroutine\MySQL;
+use Throwable;
 
 class CoroutineMysqlClientPool
 {
@@ -38,13 +40,32 @@ class CoroutineMysqlClientPool
 
     /**
      * 初始化连接池
+     * @throws Throwable
      */
     public static function poolInit()
     {
+        self::$poolSize = Config::get('pool.mysql.size', 5);
         for ($i = 1; $i <= self::$poolSize; $i++) {
+            if ($i <= 1) {
+                EntityMysql::instanceStart();
+            }
             $client = self::getClient();
             self::$pool[] = $client;
             ++self::$freeSize;
+        }
+    }
+
+    /**
+     * 释放连接池
+     */
+    public static function poolFree()
+    {
+        if(self::$poolSize == self::$freeSize){
+            EntityMysql::deleteInstance();
+            self::$pool = [];
+            self::$poolSize = 5;
+            self::$freeSize = 0;
+            self::$busySize = 0;
         }
     }
 
@@ -72,13 +93,18 @@ class CoroutineMysqlClientPool
      */
     public static function get(): MySQL
     {
-        $client = array_pop(self::$pool);
+        $client = array_shift(self::$pool);
         if (!$client || self::$freeSize <= 0) {
             self::$pool[] = self::getClient();
             ++self::$poolSize;
             ++self::$freeSize;
             $client = array_pop(self::$pool);
         }
+
+        if (!$client->connected) {
+            $client = self::getClient();
+        }
+
         --self::$freeSize;
         ++self::$busySize;
 

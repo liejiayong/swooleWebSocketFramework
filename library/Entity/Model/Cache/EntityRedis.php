@@ -65,6 +65,16 @@ class EntityRedis
     }
 
     /**
+     * 删除redis缓存连接对象
+     */
+    public static function deleteInstance()
+    {
+        if (static::$instance) {
+            static::$instance = null;
+        }
+    }
+
+    /**
      * 返回当前实体类实例
      * @return RedisClient
      */

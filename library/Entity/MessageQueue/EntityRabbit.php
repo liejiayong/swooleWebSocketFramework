@@ -8,6 +8,7 @@
 
 namespace Library\Entity\MessageQueue;
 
+use Exception;
 use Library\Config;
 use PhpAmqpLib\Connection\AMQPStreamConnection;
 
@@ -39,6 +40,17 @@ class EntityRabbit
     }
 
     /**
+     * 删除rabbit实体单例
+     * @throws Exception
+     */
+    public static function delInstance()
+    {
+        if(static::$instance){
+            static::$instance->close();
+        }
+    }
+
+    /**
      * @param AMQPStreamConnection $instance
      */
     public static function setInstance(AMQPStreamConnection $instance)
@@ -50,7 +62,7 @@ class EntityRabbit
      * 返回当前实体类实例
      * @return AMQPStreamConnection
      */
-    public static function getInstance()
+    public static function getInstance(): AMQPStreamConnection
     {
         return self::$instance;
     }

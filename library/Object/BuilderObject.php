@@ -11,7 +11,8 @@ namespace Library\Object;
 use Closure;
 use Illuminate\Database\Query\Builder;
 use Illuminate\Database\Query\Expression;
-use Library\Entity\Model\DataBase\EntityMysql;
+use Illuminate\Support\Arr;
+use Library\Entity\Model\Database\EntityMysql;
 use Library\Pool\CoroutineMysqlClientPool;
 use Swoole\Coroutine\MySQL;
 
@@ -24,8 +25,10 @@ use Swoole\Coroutine\MySQL;
  * @method string getDefaultConnection()
  * @method void setDefaultConnection(string $name)
  * @method BuilderObject table(string $table)
+ * @method BuilderObject groupBy(array ...$groups)
+ * @method BuilderObject orderBy(string $column, string $direction)
  * @method mixed selectOne(string $query, array $bindings = [])
- * @method bool insert(string $query, array $bindings = [])
+ * @method bool insert(array $values)
  * @method int update(array $values, array $bindings = [])
  * @method int delete(string $query, array $bindings = [])
  * @method int count()
@@ -33,14 +36,19 @@ use Swoole\Coroutine\MySQL;
  * @method int affectingStatement(string $query, array $bindings = [])
  * @method bool unprepared(string $query)
  * @method array prepareBindings(array $bindings)
- * @method mixed transaction(\Closure $callback, int $attempts = 1)
+ * @method mixed transaction(Closure $callback, int $attempts = 1)
  * @method void beginTransaction()
  * @method void commit()
  * @method void rollBack()
  * @method int transactionLevel()
- * @method array pretend(\Closure $callback)
+ * @method array pretend(Closure $callback)
  * @method array get(array | mixed $columns = ['*'])
+ * @method BuilderObject forPage(int $page, int $perSize)
+ * @method BuilderObject skip(int $value)
+ * @method BuilderObject limit(int $value)
  * @method array first(array | mixed $columns = ['*'])
+ * @method string toSql()
+ * @method array getBindings()
  * @method Expression raw(mixed $value)
  * @package Library\Object
  */
@@ -82,6 +90,28 @@ class BuilderObject
     public function __call($name, $arguments)
     {
         switch ($name) {
+            case 'insert':
+                $sqlObject = $this->client->prepare(
+                    $this->builder->grammar->compileInsert($this->builder, $arguments[0])
+                );
+                if ($sqlObject == false) {
+                    return 0;
+                } else {
+                    return $sqlObject->execute(
+                        Arr::flatten($arguments[0], 1)
+                    );
+                }
+            case 'update':
+                $sqlObject = $this->client->prepare(
+                    $this->builder->grammar->compileUpdate($this->builder, $arguments[0])
+                );
+                if ($sqlObject == false) {
+                    return 0;
+                } else {
+                    return $sqlObject->execute(
+                        $this->builder->grammar->prepareBindingsForUpdate($this->builder->bindings, $arguments[0])
+                    );
+                }
             case 'get':
                 return $this->builderDo();
             case 'first':
@@ -98,6 +128,10 @@ class BuilderObject
                 return $this->client->commit();
             case 'rollBack':
                 return $this->client->rollback();
+            case 'toSql':
+                return $this->builder->toSql();
+            case 'getBindings':
+                return $this->builder->getBindings();
             default:
                 $this->builder->$name(...$arguments);
                 return $this;
